@@ -144,7 +144,7 @@ def get_group_feed(user_id, group_id, offset, limit):
             react_obj.update({"comments_count": comments_count})
             post_obj.update(react_obj)
             all_posts.append(post_obj)
-    return all_posts[:limit]
+    return all_posts[offset:offset+limit]
 
 
 def get_posts_with_more_comments_than_reactions():
@@ -160,6 +160,29 @@ def get_posts_with_more_comments_than_reactions():
             all_posts.append(post.post_id)
 
     return all_posts
+
+
+def get_posts_with_more_positive_reactions(user_id):
+    """
+    List all posts which have more Positive (Like, Love, Haha, Wow) reaction than Negative (Sad, Angry)
+    """
+    user = User.objects.get(pk=user_id)
+    posts = Post.objects.filter(posted_by=user)
+    positive_posts = []
+    for post in posts:
+        reactions = React.objects.filter(post=post)
+        positive_count = 0
+        negative_count = 0
+        for reaction in reactions:
+
+            if reaction.reaction_type in ["WOW", "LIT", "LOVE", "HA", "THUMBS - UP"]:
+                positive_count += 1
+            elif reaction.reaction_type in ["SAD", "ANGRY", "THUMBS - DOWN"]:
+                negative_count += 1
+        if positive_count > negative_count:
+            positive_posts.append(post)
+
+    return positive_posts
 
 
 def get_silent_group_members(group_id):
