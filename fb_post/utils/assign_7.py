@@ -1,37 +1,127 @@
 from fb_post.models import User, Post, Comment, React, Group, Membership
 from datetime import date
+from fb_post.utils.enum import ReactionType
+
+from fb_post.utils.exceptions import InvalidUserException,UserNotInGroupException, UserIsNotAdminException, InvalidGroupNameException, \
+    InvalidMemberException, \
+    InvalidGroupException
 
 
 def create_group(user_id, name, member_ids):
-    user = User.objects.get(user_id=user_id)
-    group = Group.objects.create(members=user, name=name)
+    try:
+        user = User.objects.get(user_id=user_id)
+        if user is None:
+            raise InvalidUserException
 
-    group.save()
+        if len(name) == 0:
+            raise InvalidGroupNameException
+
+        group = Group.objects.create(members=user, name=name)
+        group.save()
+
+        for id in member_ids:
+            member = Membership.objects.get(id=id)
+            if not member:
+                raise InvalidMemberException
+
+    except InvalidUserException:
+        print("User id is not defined")
+
+    except InvalidGroupNameException:
+        print("Game doesn't have name")
+
+    except InvalidMemberException:
+        print("Members are not present in db")
 
     return group.id
 
 
 def add_member_to_group(user_id, new_member_id, group_id):
-    user = User.objects.get(user_id=user_id)
-    member = Group.members.get(user_id=new_member_id)
-    group = Group.objects.get(id=group_id)
-    if member not in group.members.all():
-        group.members.add(member)
+    try:
+        user = User.objects.get(user_id=user_id)
+        if not user:
+            raise InvalidUserException
+        member = User.objects.get(user_id=new_member_id)
+        if not member:
+            raise InvalidMemberException
+        group = Group.objects.get(id=group_id)
+        if not group:
+            raise InvalidGroupException
+
+        check_admin = Membership.objects.get(member_id=user_id).is_admin
+
+        if not check_admin:
+            raise UserIsNotAdminException
+
+        if member not in group.members.all():
+            group.members.add(member)
+
+    except InvalidUserException:
+        print("User id is not defined")
+
+    except InvalidGroupException:
+        print("Game doesn't have name")
+
+    except InvalidMemberException:
+        print("Members are not present in db")
+
+    except UserIsNotAdminException:
+        print("User is not an admin")
 
 
 def remove_member_from_group(user_id, member_id, group_id):
-    user = User.objects.get(user_id=user_id)
-    member = Group.members.get(user_id=member_id)
-    group = Group.objects.get(id=group_id)
-    group.members.remove(member)
+    try:
+        user = User.objects.get(user_id=user_id)
+        if user is None:
+            raise InvalidUserException
+        member = User.objects.get(user_id=member_id)
+        if member:
+            raise InvalidMemberException
+        group = Group.objects.get(id=group_id)
+        if group:
+            raise InvalidGroupException
+        group.members.remove(member)
 
+        check_admin = Membership.objects.get(user_id=user_id).is_admin
+
+        if check_admin:
+            raise UserIsNotAdminException
+
+    except InvalidUserException:
+        print("User id is not defined")
+
+    except InvalidGroupNameException:
+        print("Game doesn't have name")
+
+    except InvalidMemberException:
+        print("Members are not present in db")
+
+    except UserIsNotAdminException:
+        print("User is not an admin")
 
 def make_member_as_admin(user_id, member_id, group_id):
-    user = User.objects.get(user_id=user_id)
-    member = Group.members.get(user_id=member_id)
-    group = Group.objects.get(id=group_id)
-    group.membership_set.update(is_admin=True)
+    try:
+        user = User.objects.get(user_id=user_id)
+        if user is None:
+            raise InvalidUserException
+        member = Group.objects.get(members__user_id=member_id)
+        if member:
+            raise InvalidMemberException
+        group = Group.objects.get(id=group_id)
+        if not user or not member:
+            raise UserNotInGroupException
+        group.membership_set.update(is_admin=True)
+    except InvalidUserException:
+        print("User id is not defined")
 
+    except InvalidGroupNameException:
+        print("Game doesn't have name")
+
+    except InvalidMemberException:
+        print("Members are not present in db")
+
+    except UserNotInGroupException:
+        print("User not in group")
 
 def create_post(user_id, post_content, group_id=None):
     """
@@ -144,7 +234,7 @@ def get_group_feed(user_id, group_id, offset, limit):
             react_obj.update({"comments_count": comments_count})
             post_obj.update(react_obj)
             all_posts.append(post_obj)
-    return all_posts[offset:offset+limit]
+    return all_posts[offset:offset + limit]
 
 
 def get_posts_with_more_comments_than_reactions():
@@ -175,9 +265,9 @@ def get_posts_with_more_positive_reactions(user_id):
         negative_count = 0
         for reaction in reactions:
 
-            if reaction.reaction_type in ["WOW", "LIT", "LOVE", "HA", "THUMBS - UP"]:
+            if reaction.reaction_type in [ReactionType.WOW.value, ReactionType.LIT.value, ReactionType.LOVE.value, ReactionType.HA.value, ReactionType.UP.value]:
                 positive_count += 1
-            elif reaction.reaction_type in ["SAD", "ANGRY", "THUMBS - DOWN"]:
+            elif reaction.reaction_type in [ReactionType.SAD.value, ReactionType.ANGRY.value, ReactionType.DOWN.value]:
                 negative_count += 1
         if positive_count > negative_count:
             positive_posts.append(post)
