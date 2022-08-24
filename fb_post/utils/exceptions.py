@@ -1,41 +1,41 @@
 from django.core.exceptions import *
-from fb_post.models import User, Post, Comment, React,Group,Membership
 
 
-class InvalidUserException(User.DoesNotExist):
+
+class InvalidUserException(Exception):
      pass
 
-class InvalidGroupNameException(Group.DoesNotExist):
+class InvalidGroupNameException(Exception):
     pass
 
-class InvalidMemberException(Membership.DoesNotExist):
+class InvalidMemberException(Exception):
     pass
 
-class InvalidPostContent(Post.DoesNotExist):
+class InvalidPostContent(Exception):
     pass
 
-class InvalidGroupException(Group.DoesNotExist):
+class InvalidGroupException(Exception):
     pass
 
-class UserIsNotAdminException(PermissionDenied):
+class UserIsNotAdminException(Exception):
     pass
 
-class UserNotInGroupException(User.DoesNotExist):
+class UserNotInGroupException(Exception):
     pass
 
-class InvalidPostException(Post.DoesNotExist):
+class InvalidPostException(Exception):
     pass
 
-class InvalidCommentException(Comment.DoesNotExist):
+class InvalidCommentException(Exception):
     pass
 
-class InvalidCommentContent(Comment.DoesNotExist):
+class InvalidCommentContent(Exception):
     pass
 
-class InvalidReplyContent(Comment.DoesNotExist):
+class InvalidReplyContent(Exception):
     pass
 
-class InvalidReactionTypeException(React.DoesNotExist):
+class InvalidReactionTypeException(Exception):
     pass
 
 class UserCannotDeletePostException(PermissionDenied):

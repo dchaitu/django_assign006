@@ -1,141 +1,148 @@
 from fb_post.models import User, Post, Comment, React, Group, Membership
-from datetime import date
+from datetime import date, datetime
 from fb_post.utils.enum import ReactionType
 
-from fb_post.utils.exceptions import InvalidUserException,UserNotInGroupException, UserIsNotAdminException, InvalidGroupNameException, \
+from fb_post.utils.exceptions import InvalidUserException, UserNotInGroupException, UserIsNotAdminException, \
+    InvalidGroupNameException, \
     InvalidMemberException, \
     InvalidGroupException
 
 
 def create_group(user_id, name, member_ids):
     try:
-        user = User.objects.get(user_id=user_id)
-        if user is None:
-            raise InvalidUserException
-
-        if len(name) == 0:
-            raise InvalidGroupNameException
-
-        group = Group.objects.create(members=user, name=name)
+        admin = User.objects.get(user_id=user_id)
+        group = Group.objects.create(name=name)
+        users = User.objects.filter(user_id__in=member_ids)
+        group.members.add(*users)
         group.save()
+        m = Membership.objects.get(group=group, member=admin)
+        m.is_admin = True
+        m.save()
+        return group.id
 
-        for id in member_ids:
-            member = Membership.objects.get(id=id)
-            if not member:
-                raise InvalidMemberException
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
 
-    except InvalidUserException:
-        print("User id is not defined")
+    except Group.DoesNotExist:
+        raise InvalidGroupNameException("Game doesn't have name")
 
-    except InvalidGroupNameException:
-        print("Game doesn't have name")
-
-    except InvalidMemberException:
-        print("Members are not present in db")
-
-    return group.id
+    except Membership.DoesNotExist:
+        raise InvalidMemberException("Members are not present in db")
 
 
 def add_member_to_group(user_id, new_member_id, group_id):
     try:
-        user = User.objects.get(user_id=user_id)
-        if not user:
-            raise InvalidUserException
+
         member = User.objects.get(user_id=new_member_id)
-        if not member:
-            raise InvalidMemberException
         group = Group.objects.get(id=group_id)
-        if not group:
-            raise InvalidGroupException
-
-        check_admin = Membership.objects.get(member_id=user_id).is_admin
-
-        if not check_admin:
+        group.members.get(user_id=user_id)
+        m = Membership.objects.get(group=group, member__user_id=user_id)
+        check_admin = m.is_admin
+        if check_admin == False:
             raise UserIsNotAdminException
+        else:
+            if member not in group.members.all():
+                group.members.add(member)
 
-        if member not in group.members.all():
-            group.members.add(member)
 
-    except InvalidUserException:
-        print("User id is not defined")
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
 
-    except InvalidGroupException:
-        print("Game doesn't have name")
+    except (Group.DoesNotExist, Group.MultipleObjectsReturned):
+        raise InvalidGroupException("Game doesn't have name")
 
-    except InvalidMemberException:
-        print("Members are not present in db")
+    except User.DoesNotExist:
+        raise InvalidMemberException("Members are not present in db")
 
-    except UserIsNotAdminException:
-        print("User is not an admin")
+    except Group.DoesNotExist:
+        raise UserNotInGroupException("User not in group")
+
+    except (PermissionError, Membership.MultipleObjectsReturned):
+        raise UserIsNotAdminException("User is not an admin")
 
 
 def remove_member_from_group(user_id, member_id, group_id):
     try:
-        user = User.objects.get(user_id=user_id)
-        if user is None:
-            raise InvalidUserException
         member = User.objects.get(user_id=member_id)
-        if member:
-            raise InvalidMemberException
         group = Group.objects.get(id=group_id)
-        if group:
-            raise InvalidGroupException
-        group.members.remove(member)
-
-        check_admin = Membership.objects.get(user_id=user_id).is_admin
-
-        if check_admin:
+        m = Membership.objects.get(group=group, member__user_id=user_id)
+        check_admin = m.is_admin
+        if check_admin == False:
             raise UserIsNotAdminException
+        else:
+            if member in group.members.all():
+                group.members.remove(member)
+            else:
+                raise InvalidMemberException
 
-    except InvalidUserException:
-        print("User id is not defined")
+
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
 
     except InvalidGroupNameException:
         print("Game doesn't have name")
 
-    except InvalidMemberException:
-        print("Members are not present in db")
+    except User.DoesNotExist:
+        raise InvalidMemberException("Members are not present in db")
 
     except UserIsNotAdminException:
         print("User is not an admin")
 
+
+# should make the given member_id as group admin. If the member_id already an admin to the group, then do nothing.
 def make_member_as_admin(user_id, member_id, group_id):
     try:
         user = User.objects.get(user_id=user_id)
-        if user is None:
-            raise InvalidUserException
-        member = Group.objects.get(members__user_id=member_id)
-        if member:
-            raise InvalidMemberException
         group = Group.objects.get(id=group_id)
-        if not user or not member:
-            raise UserNotInGroupException
-        group.membership_set.update(is_admin=True)
+        group.members.filter(user_id=user_id)
+        u = Membership.objects.get(group=group, member__user_id=user_id)
+        check_admin = u.is_admin
+        if check_admin == False:
+            raise UserIsNotAdminException
+        else:
+            m = Membership.objects.get(group=group, member__user_id=member_id)
+            if m.is_admin == False:
+                m.is_admin = True
+            m.save()
+
+
     except InvalidUserException:
-        print("User id is not defined")
+        raise InvalidUserException("User id is not defined")
 
-    except InvalidGroupNameException:
-        print("Game doesn't have name")
+    except Group.DoesNotExist:
+        raise InvalidGroupNameException("Game doesn't have name")
 
-    except InvalidMemberException:
-        print("Members are not present in db")
+    except User.DoesNotExist:
+        raise InvalidMemberException("Members are not present in db")
 
-    except UserNotInGroupException:
-        print("User not in group")
+    except (User.DoesNotExist, Group.DoesNotExist):
+        raise UserNotInGroupException("User not in group")
+
 
 def create_post(user_id, post_content, group_id=None):
     """
     :returns: post_id
     """
-    user = User.objects.get(user_id=user_id)
-    user.save()
-    group = Group.objects.get(pk=group_id)
-    post_id = input("post id")
-    date_entry = input('Enter a date in YYYY-MM-DD format')
-    year, month, day = map(int, date_entry.split('-'))
-    posted_at = date(year, month, day)
-    group.post_set.create(post_id=post_id, content=post_content, posted_at=posted_at, posted_by=user)
-    group.save()
+    try:
+        user = User.objects.get(user_id=user_id)
+        group = Group.objects.get(pk=group_id)
+        m = Membership.objects.get(group=group, member__user_id=user_id)
+        post = Post.objects.create(content=post_content, posted_at=datetime.now().strftime("%Y-%m-%d"), posted_by=user,
+                                   group=group)
+
+        group.save()
+        return post.post_id
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
+
+    except Group.DoesNotExist:
+        raise InvalidGroupException("Game doesn't have name")
+
+    except User.DoesNotExist:
+        raise InvalidMemberException("Members are not present in db")
+
+    except UserIsNotAdminException:
+        print("User is not an admin")
 
 
 def get_group_feed(user_id, group_id, offset, limit):
@@ -198,23 +205,16 @@ def get_group_feed(user_id, group_id, offset, limit):
 
         for post in posts:
             post_obj = {}
-            post.update({"post_id": post.post_id})
-            user_obj = {"name": post.posted_by.name, "user_id": post.posted_by.user_id,
-                        "profile_pic": post.posted_by.profile_pic}
-            post.update({"posted_by": user_obj})
-            post.update({"posted_at": post.posted_at, "post_content": post.content})
-            # "reactions": {
-            #     "count": 10,
-            #     "type": ["HAHA", "WOW"]
-            # },
+            post_obj.update(post.__dict__())
+            del post_obj['group']
             react_obj = {}
-            try:
-                reactions = React.objects.filter(post=post)
-            except:
-                reactions = []
+
+            reactions = React.objects.filter(post=post)
+
             all_types = []
             for react in reactions:
-                all_types.append(react.reaction_type)
+                if react.reaction not in all_types:
+                    all_types.append(react.reaction)
 
             react_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
             comments = Comment.objects.filter(post=post)
@@ -223,11 +223,16 @@ def get_group_feed(user_id, group_id, offset, limit):
 
             for comment in comments:
                 comment_obj = {}
-                comment_obj.update({"comment_id": comment.comment_id,
-                                    "commenter": {"user_id": comment.commented_by.user_id,
-                                                  "name": comment.commented_by.name,
-                                                  "profile_pic": comment.commented_by.profile_pic},
-                                    "commented_at": comment.commented_at, "comment_content": comment.content})
+                comment_obj.update(comment.__dict__())
+                comment_react = React.objects.filter(comment = comment)
+                react_comment = []
+                for react in comment_react:
+                    if react.reaction not in react_comment:
+                        react_comment.append(react.reaction)
+                comment_obj.update({"reactions": {
+                    "count": comment_react.count(),
+                    "type": react_comment
+                }})
                 all_comments.append(comment_obj)
 
             react_obj.update({"comments": all_comments})
@@ -252,29 +257,6 @@ def get_posts_with_more_comments_than_reactions():
     return all_posts
 
 
-def get_posts_with_more_positive_reactions(user_id):
-    """
-    List all posts which have more Positive (Like, Love, Haha, Wow) reaction than Negative (Sad, Angry)
-    """
-    user = User.objects.get(pk=user_id)
-    posts = Post.objects.filter(posted_by=user)
-    positive_posts = []
-    for post in posts:
-        reactions = React.objects.filter(post=post)
-        positive_count = 0
-        negative_count = 0
-        for reaction in reactions:
-
-            if reaction.reaction_type in [ReactionType.WOW.value, ReactionType.LIT.value, ReactionType.LOVE.value, ReactionType.HA.value, ReactionType.UP.value]:
-                positive_count += 1
-            elif reaction.reaction_type in [ReactionType.SAD.value, ReactionType.ANGRY.value, ReactionType.DOWN.value]:
-                negative_count += 1
-        if positive_count > negative_count:
-            positive_posts.append(post)
-
-    return positive_posts
-
-
 def get_silent_group_members(group_id):
     """
     """
@@ -289,6 +271,49 @@ def get_silent_group_members(group_id):
 
 
 def get_user_posts(user_id):
+
+    user = User.objects.get(user_id=user_id)
+    posts = Post.objects.filter(posted_by=user)
+    all_posts = []
+    for post in posts:
+        post_obj = {}
+        post_obj.update(post.__dict__())
+        try:
+            reactions = React.objects.filter(post=post)
+        except:
+            reactions = []
+        all_types = []
+        for react.reaction in reactions:
+            all_types.append(react.reaction)
+
+        post_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
+        comments = Comment.objects.filter(post=post)
+        comments_count = Comment.objects.filter(post=post).count()
+        all_comments = []
+        for comment in comments:
+            comment_obj = {}
+            all_replies = []
+
+            replies = Comment.objects.filter(reply__comment_id=comment.comment_id)
+            replies_count = Comment.objects.filter(reply__comment_id=comment.comment_id).count()
+            for reply in replies:
+                reply_obj = {}
+                reply_obj.update(reply.__dict__())
+                reply_reactions = React.objects.filter(comment=reply)
+                all_reply_types = []
+                for react in reply_reactions:
+                    all_reply_types.append(react.reaction)
+                reply_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
+                all_replies.append(reply_obj)
+            comment_obj.update(comment.__dict__())
+            comment_obj.update({"replies_count": replies_count, "replies": all_replies})
+
+            all_comments.append(comment_obj)
+
+        post_obj.update({"comments": all_comments})
+        post_obj.update({"comments_count": comments_count})
+        all_posts.append(post_obj)
+    return all_posts
     """
     :return: [
     {
@@ -344,70 +369,3 @@ def get_user_posts(user_id):
     }
     ]
     """
-    user = User.objects.get(user_id=user_id)
-    posts = Post.objects.filter(posted_by=user)
-    all_posts = []
-    for post in posts:
-        post_obj = {}
-        group_obj = {}
-        post_obj.update({"post_id": post.post_id})
-        group_obj.update({"group_id": post.group.id, "name": post.group.name})
-        post_obj.update({"group": group_obj})
-        post_obj.update({"posted_by": {"name": post.posted_by.name, "user_id": post.posted_by.user_id,
-                                       "profile_pic": post.posted_by.profile_pic}})
-        post_obj.update({"posted_at": post.posted_at, "post_content": post.content})
-        post_obj.update({})
-        try:
-            reactions = React.objects.filter(post=post)
-        except:
-            reactions = []
-        all_types = []
-        for react in reactions:
-            all_types.append(react.reaction_type)
-
-        post_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
-        comments = Comment.objects.filter(post=post)
-        comments_count = Comment.objects.filter(post=post).count()
-        all_comments = []
-        # "replies": [{
-        #     "comment_id": 2
-        #     "commenter": {
-        #         "user_id": 1,
-        #         "name": "iB Cricket",
-        #         "profile_pic": "https://dummy.url.com/pic.png"
-        #     },
-        for comment in comments:
-            comment_obj = {}
-            all_replies = []
-
-            replies = Comment.objects.filter(reply__comment_id=comment.comment_id)
-            replies_count = Comment.objects.filter(reply__comment_id=comment.comment_id).count()
-            for reply in replies:
-                reply_obj = {}
-                reply_obj.update({"comment_id": reply.comment_id})
-                commenter_obj = {}
-                commenter_obj.update({"user_id": reply.commented_by.user_id, "name": reply.commented_by.name,
-                                      "profile_pic": reply.commented_by.profile_pic})
-                reply_obj.update({"commenter": commenter_obj})
-                reply_obj.update({"commented_at": reply.commented_at, "comment_content": reply.content})
-                reply_reactions = React.objects.filter(comment=reply)
-                all_reply_types = []
-                for react in reply_reactions:
-                    all_reply_types.append(react.reaction_type)
-                reply_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
-                all_replies.append(reply_obj)
-
-            comment_obj.update({"comment_id": comment.comment_id,
-                                "commenter": {"user_id": comment.commented_by.user_id,
-                                              "name": comment.commented_by.name,
-                                              "profile_pic": comment.commented_by.profile_pic},
-                                "commented_at": comment.commented_at,
-                                "comment_content": comment.content})
-            comment_obj.update({"replies_count": replies_count, "replies": all_replies})
-
-            all_comments.append(comment_obj)
-
-        post_obj.update({"comments": all_comments})
-        post_obj.update({"comments_count": comments_count})
-        all_posts.append(post_obj)
-        return all_posts

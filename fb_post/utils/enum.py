@@ -1,6 +1,7 @@
 from django.db import models
 from enum import Enum
 
+
 class ReactionType(Enum):
     WOW = "WOW"
     LIT = "LIT"

@@ -1,4 +1,5 @@
 from django.db import models
+from fb_post.utils.enum import ReactionType
 
 
 # Create your models here.
@@ -11,6 +12,9 @@ class User(models.Model):
     def __str__(self):
         return self.name
 
+    def __dict__(self):
+        return {"user_id":self.user_id,"name":self.name,"profile_pic":self.profile_pic}
+
 
 class Group(models.Model):
     name = models.CharField(max_length=100)
@@ -19,6 +23,8 @@ class Group(models.Model):
     def __str__(self):
         return f'{self.name}'
 
+    def __dict__(self):
+        return {"group_id":self.id,"name":self.name}
 
 class Membership(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
@@ -27,6 +33,7 @@ class Membership(models.Model):
 
     def __str__(self):
         return f'Membership for {self.group.name}'
+
 
 
 class Post(models.Model):
@@ -38,6 +45,9 @@ class Post(models.Model):
 
     def __str__(self):
         return "{} Posted {}".format(self.posted_by.name, self.content)
+
+    def __dict__(self):
+        return {"post_id":self.post_id,"group":self.group.__dict__(),"posted_by":self.posted_by.__dict__(),"posted_at":self.posted_at.strftime("%Y-%m-%d"),"post_content":self.content}
 
 
 class Comment(models.Model):
@@ -54,19 +64,11 @@ class Comment(models.Model):
         else:
             return "{} commented on {}".format(self.commented_by.name, self.post.content)
 
+    def __dict__(self):
+        return {"comment_id":self.comment_id,"commenter":self.commented_by.__dict__(),"commented_at":self.commented_at.strftime("%Y-%m-%d"),"comment_content":self.content}
 
 class React(models.Model):
-    CHOICES = (
-        ("WOW", "WOW"),
-        ("LIT", "LIT"),
-        ("LOVE", "LOVE"),
-        ("HA", "HAHA"),
-        ("THUMBS - UP", "UP"),
-        ("THUMBS - DOWN", "DOWN"),
-        ("ANGRY", "ANGRY"),
-        ("SAD", "SAD"),
-    )
-    reaction = models.CharField(choices=CHOICES, max_length=100)
+    reaction = models.CharField(choices=[(tag.value,tag) for tag in ReactionType], max_length=100)
     post = models.ForeignKey(Post, related_name="reacted_to_post", on_delete=models.CASCADE, blank=True, null=True)
     comment = models.ForeignKey(Comment, related_name="commented_to_the_post", on_delete=models.CASCADE, blank=True,
                                 null=True)
