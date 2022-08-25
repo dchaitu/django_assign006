@@ -1,4 +1,4 @@
-from django.db.models import Q, Count, Avg,F
+from django.db.models import Q, Count, Avg, F
 from fb_post.models import User, Post, Comment, React
 from datetime import date
 from fb_post.utils.exceptions import InvalidUserException, InvalidPostContent, InvalidCommentException, \
@@ -12,39 +12,36 @@ def create_post(user_id, post_content):
     """
     :returns: post_id
     """
-
+    if len(post_content) == 0:
+        raise InvalidPostException("Post is empty")
     try:
         user = User.objects.get(user_id=user_id)
-        date_entry = input('Enter a date in YYYY-MM-DD format')
-        year, month, day = map(int, date_entry.split('-'))
-        posted_at = date(year, month, day)
-        post = Post.objects.create(posted_by=user, content=post_content, posted_at=posted_at)
+        post = Post.objects.create(posted_by=user, content=post_content,
+                                   posted_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         post.save()
 
         return post
 
 
-    except Post.DoesNotExist:
-        raise InvalidPostException
 
     except User.DoesNotExist:
         raise InvalidUserException
-
-
 
 
 def create_comment(user_id, post_id, comment_content):
     """
     :returns: comment_id
     """
+    if len(comment_content) == 0:
+        raise InvalidCommentContent("Comment id is not defined")
+
     try:
         user = User.objects.get(user_id=user_id)
         post = Post.objects.get(post_id=post_id)
         post.save()
-        date_entry = input('Enter a date in YYYY-MM-DD format')
-        year, month, day = map(int, date_entry.split('-'))
-        commented_time = date(year, month, day)
-        comment = Comment.objects.create(content=comment_content, commented_at=commented_time, commented_by=user,
+        comment = Comment.objects.create(content=comment_content,
+                                         commented_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                         commented_by=user,
                                          post=post)
 
         comment.save()
@@ -54,24 +51,22 @@ def create_comment(user_id, post_id, comment_content):
     except Post.DoesNotExist:
         raise InvalidPostException("Post id not in database")
 
-    except Comment.DoesNotExist:
-        raise InvalidCommentContent("Comment id is not defined")
-
     except User.DoesNotExist:
         raise InvalidUserException("User id is not defined")
-
-
 
 
 def reply_to_comment(user_id, comment_id, reply_content):
     """
     :returns: comment_id
     """
+    if len(reply_content) == 0:
+        raise InvalidReplyContent
+
     try:
         user = User.objects.get(user_id=user_id)
         comment = Comment.objects.get(comment_id=comment_id)
-        reply = Comment.objects.create(commented_by=user, content=reply_content, reply_id=comment_id,
-                                       commented_at=datetime.now().strftime("%Y-%m-%d"))
+        reply = Comment.objects.create(commented_by=user, content=reply_content, reply=comment,
+                                       commented_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         reply.save()
 
         return reply.comment_id
@@ -79,23 +74,20 @@ def reply_to_comment(user_id, comment_id, reply_content):
     # Additionally , if the given comment_id corresponds to a 'reply' instead of a direct comment to a post, then a reply should be created to the comment
 
     except User.DoesNotExist:
-        raise  InvalidUserException("User id is not defined")
+        raise InvalidUserException("User id is not defined")
 
     except Comment.DoesNotExist:
         raise InvalidCommentException("Comment id is not defined")
-
-        # check_comment = Comment.objects.get(comment_id=comment_id)
-        # if check_comment.reply:
-        #     Comment.objects.create(commented_by=user, content=reply_content, comment_id=comment_id)
-
-
-
-
 
 
 def react_to_post(user_id, post_id, reaction_type):
     """
     """
+    if reaction_type not in [ReactionType.WOW.value, ReactionType.HA.value, ReactionType.UP.value,
+                             ReactionType.ANGRY.value,
+                             ReactionType.LIT.value, ReactionType.DOWN.value, ReactionType.SAD.value,
+                             ReactionType.LOVE.value]:
+        raise InvalidReactionTypeException("Reaction Type is not defined")
     try:
         user = User.objects.get(user_id=user_id)
         if not user:
@@ -103,34 +95,29 @@ def react_to_post(user_id, post_id, reaction_type):
         post = Post.objects.get(post_id=post_id)
         if not post:
             raise InvalidPostException
-        reacted_time = datetime.now().strftime("%Y-%m-%d")
-        if reaction_type not in [ReactionType.WOW.value, ReactionType.HA.value, ReactionType.UP.value,
-                                 ReactionType.ANGRY.value,
-                                 ReactionType.LIT.value, ReactionType.DOWN.value, ReactionType.SAD.value,
-                                 ReactionType.LOVE.value]:
-            raise InvalidReactionTypeException
-        # if the user is reacting to the post for the first time, then the function should create a reaction.
+        reacted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         already_reacted = React.objects.filter(reacted_by=user_id, post=post)
         if already_reacted:
             already_reacted.delete()
         react = React.objects.create(reacted_at=reacted_time, reacted_by=user, post=post, reaction=reaction_type)
         react.save()
 
-
-
     except Post.DoesNotExist:
         raise InvalidPostException("Post id is not defined")
 
-    except User.DoesNotExist :
-        raise  InvalidUserException("User id is not defined")
-
-    except React.DoesNotExist:
-        raise InvalidReactionTypeException("Reaction Type is not defined")
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
 
 
 def react_to_comment(user_id, comment_id, reaction_type):
     """
     """
+    if reaction_type not in [ReactionType.WOW.value, ReactionType.HA.value, ReactionType.UP.value,
+                             ReactionType.ANGRY.value,
+                             ReactionType.LIT.value, ReactionType.DOWN.value, ReactionType.SAD.value,
+                             ReactionType.LOVE.value]:
+        raise InvalidReactionTypeException("Reaction Type is not defined")
+
     try:
         user = User.objects.get(user_id=user_id)
         comment = Comment.objects.get(comment_id=comment_id)
@@ -140,18 +127,14 @@ def react_to_comment(user_id, comment_id, reaction_type):
             reaction_exists.delete()
         elif reaction_exists.reaction != reaction_type:
             reaction_exists.reaction = reaction_type
-            reaction_exists.reacted_at = datetime.now().strftime("%Y-%m-%d")
+            reaction_exists.reacted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             reaction_exists.save()
         else:
             React.objects.create(reaction=reaction_type, comment=comment, reacted_by=user,
-                                 reacted_at=datetime.now().strftime("%Y-%m-%d"))
-
+                                 reacted_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     except User.DoesNotExist:
         raise InvalidUserException("User id is not defined")
-
-    except React.DoesNotExist:
-        raise InvalidReactionTypeException("Reaction Type is not defined")
 
 
 def get_total_reaction_count():
@@ -163,8 +146,6 @@ def get_reaction_metrics(post_id):
     """Return total count for each reaction type"""
     try:
         post = Post.objects.get(pk=post_id)
-        if not post:
-            raise InvalidPostException
         love = Q(reaction=ReactionType.LOVE.value)
         lit = Q(reaction=ReactionType.LIT.value)
         up = Q(reaction=ReactionType.UP.value)
@@ -174,7 +155,7 @@ def get_reaction_metrics(post_id):
         angry = Q(reaction=ReactionType.ANGRY.value)
         post = Q(post=post)
 
-        d = {"LOVE": React.objects.filter(post & love).count(),
+        metrics = {"LOVE": React.objects.filter(post & love).count(),
              "LIT": React.objects.filter(post & lit).count(),
              "UP": React.objects.filter(post & up).count(),
              "DOWN": React.objects.filter(post & down).count(),
@@ -182,15 +163,9 @@ def get_reaction_metrics(post_id):
              "SAD": React.objects.filter(post & sad).count(),
              "ANGRY": React.objects.filter(post & angry).count()}
 
-        return d
+        return metrics
     except Post.DoesNotExist:
-        InvalidPostException("post id is defined")
-
-    # except (, Post.MultipleObjectsReturned):
-    #     print("Post may be deleted")
-    #     react_list = []
-    #     return react_list
-
+        raise InvalidPostException("post id is defined")
 
 
 def delete_post(user_id, post_id):
@@ -201,33 +176,31 @@ def delete_post(user_id, post_id):
 
         post = Post.objects.get(pk=post_id)
 
-
         if post.posted_by == user:
             post.delete()
             print(f"post No {post_id} deleted and comments and reactions to it also deleted")
+        else:
+            raise UserCannotDeletePostException
+
 
     # InvalidPostException
     except Post.DoesNotExist:
-        raise  UserCannotDeletePostException("Post is not created by user")
-    except InvalidUserException:
-        print("User id is not defined")
+        raise InvalidPostException("Post is not created by user")
+    except User.DoesNotExist:
+        raise InvalidUserException("User id is not defined")
 
 
 # Need to check
 def get_posts_with_more_positive_reactions():
     """
     """
-    # l=[]
-    positive = [ReactionType.WOW.value, ReactionType.LOVE.value, ReactionType.LIT.value, ReactionType.HA.value, ReactionType.UP.value]
+    positive = [ReactionType.WOW.value, ReactionType.LOVE.value, ReactionType.LIT.value, ReactionType.HA.value,
+                ReactionType.UP.value]
     negative = [ReactionType.DOWN.value, ReactionType.ANGRY.value, ReactionType.SAD.value]
-    # posts = Post.objects.all()
     posr = Count('reacted_to_post', filter=Q(reacted_to_post__reaction__in=positive))
-    negr = Count('reacted_to_post',filter=Q(reacted_to_post__reaction__in=negative))
-    posts_with_more_positive_reactions = Post.objects.annotate(postive_count=posr, negative_count=negr).filter(postive_count__gt = F('negative_count') )
-    # for post in posts:
-    #     if(post.reacted_to_post.filter(reaction__in=positive).count()>post.reacted_to_post.filter(reaction__in=negative).count()):
-    #         l.append(post)
-
+    negr = Count('reacted_to_post', filter=Q(reacted_to_post__reaction__in=negative))
+    posts_with_more_positive_reactions = Post.objects.annotate(postive_count=posr, negative_count=negr).filter(
+        postive_count__gt=F('negative_count'))
 
     return list(posts_with_more_positive_reactions)
 
@@ -238,11 +211,15 @@ def get_posts_reacted_by_user(user_id):
     """
     :returns: list of post ids
     """
-    user = User.objects.get(user_id=user_id)
-    reacted_posts = React.objects.filter(reacted_by=user)
-    post_ids = Post.objects.filter(post_id__in=reacted_posts).values('post_id')
+    try:
+        user = User.objects.get(user_id=user_id)
+        reacted_posts = React.objects.filter(reacted_by=user)
+        post_ids = Post.objects.filter(post_id__in=reacted_posts).values('post_id')
 
-    return list(post_ids)
+        return list(post_ids)
+
+    except User.DoesNotExist:
+        raise InvalidUserException
 
 
 def get_reactions_to_post(post_id):
@@ -260,18 +237,15 @@ def get_reactions_to_post(post_id):
 
         for r in reactions:
             react_dict = {}
-            react_dict['user_id'] = r.reacted_by_id
-            react_dict['name'] = r.reacted_by.name
-            react_dict['profile_pic'] = r.reacted_by.profile_pic
+            react_dict.update(r.reacted_by.get_user_dict())
             react_dict['reaction'] = r.reaction
             react_list.append(react_dict)
 
-    except (Post.DoesNotExist, Post.MultipleObjectsReturned):
-        print("Post may be deleted or not created")
-        react_list = []
         return react_list
 
-    return react_list
+    except (Post.DoesNotExist, Post.MultipleObjectsReturned):
+        raise InvalidPostException
+
 
 # Exceptions not working properly
 """
@@ -323,19 +297,17 @@ def get_reactions_to_post(post_id):
         "comments_count": 3,
     }
     """
-def get_post(post_id):
 
+
+def get_post(post_id):
     try:
 
         post = Post.objects.get(pk=post_id)
         reactions = React.objects.filter(post=post)
         comments = Comment.objects.filter(post=post)
-        count = 0
-        reaction_type = []
         all_comments = []
-        replies = []
         post_obj = {}
-        post_obj.update(post.__dict__())
+        post_obj.update(post.get_post_dict())
         all_types = []
         for react in reactions:
             if react.reaction not in all_types:
@@ -343,52 +315,35 @@ def get_post(post_id):
         post_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
         del post_obj['group']
         for comment in comments:
-            comment_obj={}
-            comment_obj.update(comment.__dict__())
+            comment_obj = {}
+            comment_obj.update(comment.get_comment_dict())
+            reaction_type = []
             reacted_to_comment = React.objects.filter(comment=comment)
-            reply = Comment.objects.filter(reply=comment)
-            for y in reply:
-                replies.append(y.__dict__())
-            comment_obj.update({"replies": replies})
+
             for react in reacted_to_comment:
                 if react.reaction not in reaction_type:
                     reaction_type.append(react.reaction)
-            comment_obj.update({})
+            comment_obj.update({"reactions": {"count": reacted_to_comment.count(), "type": reaction_type}})
+            replies = Comment.objects.filter(reply=comment)
+            reaction_to_reply = React.objects.filter(comment__in=replies)
+            reply_comments = []
+            reply_reaction_type = []
+            for y in replies:
+                y = y.get_comment_dict()
+                y.update({"reactions": {"count": reaction_to_reply.count(), "type": reply_reaction_type}})
+                reply_comments.append(y)
+            comment_obj.update({"replies": reply_comments})
 
-            d={}
-            d.update(comment.__dict__())
+            for react in reaction_to_reply:
+                if react.reaction not in reply_reaction_type:
+                    reply_reaction_type.append(react.reaction)
 
-            d.update({
-
-                 "replies": replies,
-                 "replies_count": Comment.objects.filter(reply=comment).count()
-
-                 })
-            reaction_type = []
-            count += len(replies)
-            replies = []
             all_comments.append(comment_obj)
 
-        l = []
-        for react in reactions:
-            if react.reaction not in reaction_type:
-                l.append(react.reaction)
-
-
-
-        # m.update({
-        #      'reactions': {'count': reactions.count(), 'type': all_types},
-        #      'comments': c,
-        #      'comments_count': int(len(c) + count)
-        #
-        #      })
-        post_obj.update({"comments":all_comments})
+        post_obj.update({"comments": all_comments})
         return post_obj
     except Post.DoesNotExist:
         raise InvalidPostException("post id doesn't exist")
-
-    except (Post.DoesNotExist, Post.MultipleObjectsReturned):
-        print("Post may be deleted")
 
 
 def get_user_posts(user_id):
@@ -417,14 +372,9 @@ def get_replies_for_comment(comment_id):
 
         comment = Comment.objects.get(pk=comment_id)
         reply = Comment.objects.filter(reply=comment)
-        if reply is None:
-            raise Comment.DoesNotExist
         for y in reply:
-            replies.append(y.__dict__())
+            replies.append(y.get_comment_dict())
+        return replies
+
     except Comment.DoesNotExist:
         raise InvalidCommentException("Comment is not created")
-
-    except (Comment.DoesNotExist, Comment.MultipleObjectsReturned):
-        print("Comment may be deleted")
-
-    return replies

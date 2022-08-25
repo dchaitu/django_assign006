@@ -1,5 +1,5 @@
 from fb_post.models import User, Post, Comment, React, Group, Membership
-from datetime import date, datetime
+from datetime import datetime
 from fb_post.utils.enum import ReactionType
 
 from fb_post.utils.exceptions import InvalidUserException, UserNotInGroupException, UserIsNotAdminException, \
@@ -9,6 +9,9 @@ from fb_post.utils.exceptions import InvalidUserException, UserNotInGroupExcepti
 
 
 def create_group(user_id, name, member_ids):
+    if len(name)==0:
+        raise InvalidGroupNameException("Game doesn't have name")
+
     try:
         admin = User.objects.get(user_id=user_id)
         group = Group.objects.create(name=name)
@@ -22,9 +25,6 @@ def create_group(user_id, name, member_ids):
 
     except User.DoesNotExist:
         raise InvalidUserException("User id is not defined")
-
-    except Group.DoesNotExist:
-        raise InvalidGroupNameException("Game doesn't have name")
 
     except Membership.DoesNotExist:
         raise InvalidMemberException("Members are not present in db")
@@ -110,7 +110,7 @@ def make_member_as_admin(user_id, member_id, group_id):
         raise InvalidUserException("User id is not defined")
 
     except Group.DoesNotExist:
-        raise InvalidGroupNameException("Game doesn't have name")
+        raise InvalidGroupException("Group doesn't exists")
 
     except User.DoesNotExist:
         raise InvalidMemberException("Members are not present in db")
@@ -205,7 +205,7 @@ def get_group_feed(user_id, group_id, offset, limit):
 
         for post in posts:
             post_obj = {}
-            post_obj.update(post.__dict__())
+            post_obj.update(post.get_post_dict())
             del post_obj['group']
             react_obj = {}
 
@@ -223,9 +223,18 @@ def get_group_feed(user_id, group_id, offset, limit):
 
             for comment in comments:
                 comment_obj = {}
-                comment_obj.update(comment.__dict__())
+                comment_obj.update(comment.get_comment_dict())
                 comment_react = React.objects.filter(comment = comment)
                 react_comment = []
+                reply_comments = []
+                reply_reaction_type = []
+                replies = Comment.objects.filter(reply=comment)
+                reaction_to_reply = React.objects.filter(comment__in=replies)
+                for y in replies:
+                    y = y.get_comment_dict()
+                    y.update({"reactions": {"count": reaction_to_reply.count(), "type": reply_reaction_type}})
+                    reply_comments.append(y)
+                comment_obj.update({"replies": reply_comments})
                 for react in comment_react:
                     if react.reaction not in react_comment:
                         react_comment.append(react.reaction)
@@ -251,7 +260,7 @@ def get_posts_with_more_comments_than_reactions():
     for post in posts:
         comment_count = (Comment.objects.filter(post=post).count())
         react_count = React.objects.filter(post=post).count()
-        if (comment_count > react_count):
+        if comment_count > react_count:
             all_posts.append(post.post_id)
 
     return all_posts
@@ -264,7 +273,7 @@ def get_silent_group_members(group_id):
     users = group.members.all()
     silent_users = []
     for user in users:
-        if (Post.objects.filter(posted_by=user).count() == 0):
+        if Post.objects.filter(posted_by=user).count() == 0:
             silent_users.append(user)
 
     return silent_users
@@ -272,48 +281,49 @@ def get_silent_group_members(group_id):
 
 def get_user_posts(user_id):
 
-    user = User.objects.get(user_id=user_id)
-    posts = Post.objects.filter(posted_by=user)
-    all_posts = []
-    for post in posts:
-        post_obj = {}
-        post_obj.update(post.__dict__())
-        try:
+
+    try:
+        user = User.objects.get(user_id=user_id)
+        posts = Post.objects.filter(posted_by=user)
+        all_posts = []
+        for post in posts:
+            post_obj = {}
+            post_obj.update(post.get_post_dict())
             reactions = React.objects.filter(post=post)
-        except:
-            reactions = []
-        all_types = []
-        for react.reaction in reactions:
-            all_types.append(react.reaction)
+            all_types = []
+            for react in reactions:
+                if react.reaction not in all_types:
+                    all_types.append(react.reaction)
 
-        post_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
-        comments = Comment.objects.filter(post=post)
-        comments_count = Comment.objects.filter(post=post).count()
-        all_comments = []
-        for comment in comments:
-            comment_obj = {}
-            all_replies = []
+            post_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
+            comments = Comment.objects.filter(post=post)
+            comments_count = Comment.objects.filter(post=post).count()
+            all_comments = []
+            for comment in comments:
+                comment_obj = {}
+                all_replies = []
+                replies = Comment.objects.filter(reply__comment_id=comment.comment_id)
+                replies_count = Comment.objects.filter(reply__comment_id=comment.comment_id).count()
+                for reply in replies:
+                    reply_obj = {}
+                    reply_obj.update(reply.get_comment_dict())
+                    reply_reactions = React.objects.filter(comment=reply)
+                    all_reply_types = []
+                    for react in reply_reactions:
+                        all_reply_types.append(react.reaction)
+                    reply_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
+                    all_replies.append(reply_obj)
+                comment_obj.update(comment.get_comment_dict())
+                comment_obj.update({"replies_count": replies_count, "replies": all_replies})
 
-            replies = Comment.objects.filter(reply__comment_id=comment.comment_id)
-            replies_count = Comment.objects.filter(reply__comment_id=comment.comment_id).count()
-            for reply in replies:
-                reply_obj = {}
-                reply_obj.update(reply.__dict__())
-                reply_reactions = React.objects.filter(comment=reply)
-                all_reply_types = []
-                for react in reply_reactions:
-                    all_reply_types.append(react.reaction)
-                reply_obj.update({"reactions": {"count": reactions.count(), "type": all_types}})
-                all_replies.append(reply_obj)
-            comment_obj.update(comment.__dict__())
-            comment_obj.update({"replies_count": replies_count, "replies": all_replies})
+                all_comments.append(comment_obj)
 
-            all_comments.append(comment_obj)
-
-        post_obj.update({"comments": all_comments})
-        post_obj.update({"comments_count": comments_count})
-        all_posts.append(post_obj)
-    return all_posts
+            post_obj.update({"comments": all_comments})
+            post_obj.update({"comments_count": comments_count})
+            all_posts.append(post_obj)
+        return all_posts
+    except:
+        print("Invalid")
     """
     :return: [
     {
